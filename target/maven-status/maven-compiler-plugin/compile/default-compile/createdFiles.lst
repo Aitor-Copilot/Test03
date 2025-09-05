@@ -1,0 +1,3 @@
+com\vehicleauth\VehicleAuthDatabaseManager.class
+com\vehicleauth\ui\MenuInterface.class
+com\vehicleauth\service\DatabaseService.class

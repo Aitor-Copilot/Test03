@@ -1,11 +1,17 @@
 # Vehicle Authorization Database
 
-This project contains a complete Microsoft Access database structure designed to store Vehicle Authorization data from JSON files.
+This project contains a complete Microsoft Access database structure designed to store Vehicle Authorization data from JSON files, along with a Java application for easy database management.
 
 ## Quick Start
 
-To create the database structure, run the single PowerShell script:
+### Option 1: Java Application (Recommended)
+Run the user-friendly Java application:
+```batch
+run-vehicle-auth-manager.bat
+```
 
+### Option 2: Direct PowerShell Script
+To create the database structure directly, run the PowerShell script:
 ```powershell
 powershell -ExecutionPolicy Bypass -File "CreateVehicleAuthDatabase.ps1"
 ```
@@ -25,19 +31,38 @@ powershell -ExecutionPolicy Bypass -File "CreateVehicleAuthDatabase.ps1"
 
 ## Requirements
 
-- Microsoft Access installed
-- PowerShell execution policy allowing script execution
-- Access database file (Database.accdb) in the same folder
+- **Java 11 or later** (for the Java application)
+- **Microsoft Access installed**
+- **PowerShell execution policy** allowing script execution
+- **Access database file** (Database.accdb) in the same folder
 
 ## Files
 
-- `CreateVehicleAuthDatabase.ps1` - **Main script** (only script needed)
+### Core Files
+- `run-vehicle-auth-manager.bat` - **Java application launcher** (easiest way to use)
+- `CreateVehicleAuthDatabase.ps1` - **Main PowerShell script** (database creation)
 - `Database.accdb` - Target Microsoft Access database
-- `DATABASE_STRUCTURE_SUMMARY.md` - Complete documentation
+
+### Java Application
+- `src/main/java/` - Java source code (Maven project)
+- `pom.xml` - Maven configuration with dependencies
+- `target/classes/` - Compiled Java classes
+
+### Documentation
+- `README.md` - This file (usage instructions)
+- `DATABASE_STRUCTURE_SUMMARY.md` - Complete database documentation
 - `Json Files/` - Source JSON files used for analysis
 
 ## Features
 
+### Java Application Features
+✅ **User-Friendly Menu** - Interactive menu-driven interface  
+✅ **Database Creation** - Create complete database structure  
+✅ **Database Verification** - Verify existing database structure  
+✅ **Future-Ready** - Extensible for JSON import and reporting features  
+✅ **Cross-Platform** - Runs on any system with Java 11+  
+
+### PowerShell Script Features
 ✅ **Single Script Solution** - One comprehensive script does everything  
 ✅ **Error Handling** - Robust error handling and reporting  
 ✅ **Progress Tracking** - Clear progress indicators during creation  
