@@ -25,6 +25,95 @@ $WarningPreference = "Continue"
 # FUNCTIONS
 # ==============================================================================
 
+function Read-FieldLengthConfiguration {
+    param([string]$ConfigPath = "Configuration\Fields_length.txt")
+    
+    $fieldLengths = @{}
+    
+    if (-not (Test-Path $ConfigPath)) {
+        Write-Warning "Configuration file not found: $ConfigPath"
+        Write-Info "Using default field lengths from hardcoded values"
+        return $fieldLengths
+    }
+    
+    Write-Info "Reading field length configuration from: $ConfigPath"
+    
+    try {
+        $lines = Get-Content $ConfigPath
+        foreach ($line in $lines) {
+            # Skip comments and empty lines
+            if ($line.StartsWith("#") -or $line.Trim() -eq "") {
+                continue
+            }
+            
+            # Parse TableName.FieldName=Length format
+            if ($line -match "^([^.]+)\.([^=]+)=(\d+)$") {
+                $tableName = $matches[1]
+                $fieldName = $matches[2]
+                $length = [int]$matches[3]
+                
+                if (-not $fieldLengths.ContainsKey($tableName)) {
+                    $fieldLengths[$tableName] = @{}
+                }
+                $fieldLengths[$tableName][$fieldName] = $length
+            }
+        }
+        
+        Write-Success "Loaded field lengths for $($fieldLengths.Keys.Count) tables"
+        return $fieldLengths
+    }
+    catch {
+        Write-Error "Failed to read configuration file: $($_.Exception.Message)"
+        return @{}
+    }
+}
+
+function Get-FieldLength {
+    param(
+        [string]$TableName,
+        [string]$FieldName,
+        [hashtable]$FieldLengths,
+        [int]$DefaultLength = 255
+    )
+    
+    if ($FieldLengths.ContainsKey($TableName) -and $FieldLengths[$TableName].ContainsKey($FieldName)) {
+        return $FieldLengths[$TableName][$FieldName]
+    }
+    
+    return $DefaultLength
+}
+
+function Update-SqlWithFieldLengths {
+    param(
+        [string]$SqlStatement,
+        [string]$TableName,
+        [hashtable]$FieldLengths
+    )
+    
+    if ($FieldLengths.Count -eq 0) {
+        return $SqlStatement
+    }
+    
+    $updatedSql = $SqlStatement
+    
+    # Pattern to match field definitions: FieldName TEXT(length) or FieldName TEXT(length) PRIMARY KEY
+    $pattern = '(\w+)\s+TEXT\((\d+)\)(\s+PRIMARY\s+KEY)?'
+    
+    $matches = [regex]::Matches($updatedSql, $pattern)
+    foreach ($match in $matches) {
+        $fieldName = $match.Groups[1].Value
+        $currentLength = [int]$match.Groups[2].Value
+        $primaryKeyPart = $match.Groups[3].Value
+        
+        $newLength = Get-FieldLength $TableName $fieldName $FieldLengths $currentLength
+        $replacement = "$fieldName TEXT($newLength)$primaryKeyPart"
+        
+        $updatedSql = $updatedSql -replace [regex]::Escape($match.Value), $replacement
+    }
+    
+    return $updatedSql
+}
+
 function Write-Header {
     param([string]$Title)
     Write-Host ""
@@ -58,6 +147,8 @@ function Write-Info {
 # ==============================================================================
 
 function Get-TableDefinitions {
+    param([hashtable]$FieldLengths = @{})
+    
     return @{
         # Base tables (no dependencies)
         "Addresses" = @{
@@ -104,7 +195,7 @@ function Get-TableDefinitions {
         }
         
         "ApplicationBodies" = @{
-            SQL = "CREATE TABLE ApplicationBodies (ApplicationID TEXT(50), BodyID TEXT(100), BodyRole TEXT(50), PRIMARY KEY (ApplicationID, BodyID, BodyRole))"
+            SQL = "CREATE TABLE ApplicationBodies (ApplicationID TEXT(50), BodyID TEXT(100), BodyRole TEXT(50), CONSTRAINT PK_ApplicationBodies PRIMARY KEY (ApplicationID, BodyID, BodyRole))"
             Description = "Many-to-many relationship between Applications and Bodies"
         }
         
@@ -114,7 +205,7 @@ function Get-TableDefinitions {
         }
         
         "ApplicationStaff" = @{
-            SQL = "CREATE TABLE ApplicationStaff (ApplicationID TEXT(50), StaffType TEXT(50), StaffName TEXT(255), PRIMARY KEY (ApplicationID, StaffType, StaffName))"
+            SQL = "CREATE TABLE ApplicationStaff (ApplicationID TEXT(50), StaffType TEXT(50), StaffName TEXT(255), CONSTRAINT PK_ApplicationStaff PRIMARY KEY (ApplicationID, StaffType, StaffName))"
             Description = "Staff assignments (Assessors, Project Managers, etc.)"
         }
         
@@ -141,7 +232,7 @@ function Get-TableDefinitions {
         
         # Tables with further dependencies
         "Networks" = @{
-            SQL = "CREATE TABLE Networks (NetworkID AUTOINCREMENT PRIMARY KEY, MappingID TEXT(100), NetworkName TEXT(255))"
+            SQL = "CREATE TABLE Networks (NetworkID COUNTER PRIMARY KEY, MappingID TEXT(100), NetworkName TEXT(255))"
             Description = "Network information for member states"
         }
         
@@ -248,13 +339,16 @@ function Get-ForeignKeyDefinitions {
         "ALTER TABLE BillingInformation ADD CONSTRAINT FK_BillingInformation_Addresses FOREIGN KEY (AddressID) REFERENCES Addresses(AddressID)",
         "ALTER TABLE BillingInformation ADD CONSTRAINT FK_BillingInformation_ContactDetails FOREIGN KEY (ContactDetailsID) REFERENCES ContactDetails(ContactDetailsID)",
         "ALTER TABLE Bodies ADD CONSTRAINT FK_Bodies_Addresses FOREIGN KEY (AddressID) REFERENCES Addresses(AddressID)",
-        "ALTER TABLE Bodies ADD CONSTRAINT FK_Bodies_ContactDetails FOREIGN KEY (ContactDetailsID) REFERENCES ContactDetails(ContactDetailsID)"
+        "ALTER TABLE Bodies ADD CONSTRAINT FK_Bodies_ContactDetails FOREIGN KEY (ContactDetailsID) REFERENCES ContactDetails(ContactDetailsID)",
         
-        # Application → ContactPersons/BillingInformation/Bodies (made optional with conditional logic)
-        # Note: These will be added conditionally to avoid null reference issues
+        # Application → ContactPersons/BillingInformation/Bodies relationships
+        "ALTER TABLE Applications ADD CONSTRAINT FK_Applications_ContactPersons FOREIGN KEY (ContactPersonID) REFERENCES ContactPersons(ContactPersonID)",
+        "ALTER TABLE Applications ADD CONSTRAINT FK_Applications_FinancialContactPersons FOREIGN KEY (FinancialContactPersonID) REFERENCES ContactPersons(ContactPersonID)",
+        "ALTER TABLE Applications ADD CONSTRAINT FK_Applications_BillingInformation FOREIGN KEY (BillingInformationID) REFERENCES BillingInformation(BillingID)",
+        "ALTER TABLE Applications ADD CONSTRAINT FK_Applications_Bodies FOREIGN KEY (ApplicantBodyID) REFERENCES Bodies(BodyID)",
         
-        # VehicleTypes → Bodies (authorisation holder) - made optional
-        # Note: This will be added conditionally to avoid null reference issues
+        # VehicleTypes → Bodies (authorisation holder)
+        "ALTER TABLE VehicleTypes ADD CONSTRAINT FK_VehicleTypes_Bodies FOREIGN KEY (AuthorizationHolderID) REFERENCES Bodies(BodyID)"
     )
 }
 
@@ -376,12 +470,12 @@ function Remove-ExistingTable {
 }
 
 function New-DatabaseTables {
-    param($Database, $Access)
+    param($Database, $Access, $FieldLengths = @{})
     
     # First, remove all existing relationships so we can drop tables
     Remove-AllRelationships -Database $Database
     
-    $tables = Get-TableDefinitions
+    $tables = Get-TableDefinitions -FieldLengths $FieldLengths
     $tableOrder = @(
         "Addresses", "ContactDetails", "Documents",
         "ContactPersons", "BillingInformation", "Bodies",
@@ -394,6 +488,7 @@ function New-DatabaseTables {
     $successCount = 0
     $errorCount = 0
     $createdTables = @()
+    $errorDetails = @()
     
     Write-Info "Creating database tables..."
     
@@ -407,9 +502,16 @@ function New-DatabaseTables {
                 Write-Host "    - Dropped existing table" -ForegroundColor Yellow
             }
             
-            # Create new table
+            # Create new table with updated field lengths
             $tableInfo = $tables[$tableName]
-            $Database.Execute($tableInfo.SQL)
+            $updatedSQL = Update-SqlWithFieldLengths -SqlStatement $tableInfo.SQL -TableName $tableName -FieldLengths $FieldLengths
+            
+            # Show if field lengths were applied
+            if ($updatedSQL -ne $tableInfo.SQL -and $FieldLengths.Count -gt 0) {
+                Write-Host "    - Applied configuration-based field lengths" -ForegroundColor Cyan
+            }
+            
+            $Database.Execute($updatedSQL)
             
             Write-Success "    Successfully created: $tableName"
             Write-Host "    - Description: $($tableInfo.Description)" -ForegroundColor Gray
@@ -419,7 +521,9 @@ function New-DatabaseTables {
             
         }
         catch {
-            Write-Error "    Failed to create table $tableName`: $($_.Exception.Message)"
+            $errorMessage = $_.Exception.Message
+            Write-Error "    Failed to create table $tableName`: $errorMessage"
+            $errorDetails += "Table '$tableName': $errorMessage"
             $errorCount++
         }
     }
@@ -428,6 +532,7 @@ function New-DatabaseTables {
         SuccessCount = $successCount
         ErrorCount = $errorCount
         CreatedTables = $createdTables
+        ErrorDetails = $errorDetails
     }
 }
 
@@ -437,6 +542,7 @@ function New-DatabaseIndexes {
     $indexes = Get-IndexDefinitions
     $successCount = 0
     $errorCount = 0
+    $indexWarnings = @()
     
     Write-Info "Creating performance indexes..."
     
@@ -446,7 +552,9 @@ function New-DatabaseIndexes {
             $successCount++
         }
         catch {
-            Write-Warning "    Index creation warning: $($_.Exception.Message)"
+            $errorMessage = $_.Exception.Message
+            Write-Warning "    Index creation warning: $errorMessage"
+            $indexWarnings += "Index: $errorMessage"
             $errorCount++
         }
     }
@@ -461,6 +569,7 @@ function New-DatabaseIndexes {
     $foreignKeys = Get-ForeignKeyDefinitions
     $fkSuccessCount = 0
     $fkErrorCount = 0
+    $fkWarnings = @()
     
     foreach ($fkSQL in $foreignKeys) {
         try {
@@ -476,13 +585,15 @@ function New-DatabaseIndexes {
             Write-Host "    - Created: $constraintName" -ForegroundColor Green
         }
         catch {
+            $errorMessage = $_.Exception.Message
             # Check if it's just a "already exists" warning
-            if ($_.Exception.Message -like "*Ya existe una relación*" -or $_.Exception.Message -like "*already exists*") {
+            if ($errorMessage -like "*Ya existe una relación*" -or $errorMessage -like "*already exists*") {
                 Write-Host "    - Relationship already exists (skipped)" -ForegroundColor Yellow
             }
             else {
-                Write-Warning "    Foreign key creation error: $($_.Exception.Message)"
+                Write-Warning "    Foreign key creation error: $errorMessage"
                 Write-Host "    - Failed SQL: $fkSQL" -ForegroundColor Red
+                $fkWarnings += "FK: $errorMessage"
                 $fkErrorCount++
             }
         }
@@ -496,8 +607,10 @@ function New-DatabaseIndexes {
     return @{
         SuccessCount = $successCount
         ErrorCount = $errorCount
+        IndexWarnings = $indexWarnings
         ForeignKeySuccessCount = $fkSuccessCount
         ForeignKeyErrorCount = $fkErrorCount
+        ForeignKeyWarnings = $fkWarnings
     }
 }
 
@@ -607,9 +720,13 @@ function Main {
     }
     
     try {
+        # Load field length configuration
+        Write-Header "LOADING CONFIGURATION"
+        $fieldLengths = Read-FieldLengthConfiguration
+        
         # Create tables
         Write-Header "CREATING DATABASE STRUCTURE"
-        $tableResult = New-DatabaseTables -Database $connection.Database -Access $connection.Access
+        $tableResult = New-DatabaseTables -Database $connection.Database -Access $connection.Access -FieldLengths $fieldLengths
         
         # Create indexes
         $indexResult = New-DatabaseIndexes -Database $connection.Database
@@ -627,6 +744,31 @@ function Main {
         Write-Host "Index warnings: $($indexResult.ErrorCount)" -ForegroundColor Yellow
         Write-Host "Foreign key relationships created: $($indexResult.ForeignKeySuccessCount)" -ForegroundColor Green
         Write-Host "Foreign key warnings: $($indexResult.ForeignKeyErrorCount)" -ForegroundColor Yellow
+        
+        # Show detailed error information if there are errors
+        if ($tableResult.ErrorCount -gt 0 -and $tableResult.ErrorDetails) {
+            Write-Host ""
+            Write-Host "TABLE CREATION ERRORS:" -ForegroundColor Red
+            foreach ($errorDetail in $tableResult.ErrorDetails) {
+                Write-Host "  - $errorDetail" -ForegroundColor Red
+            }
+        }
+        
+        if ($indexResult.ErrorCount -gt 0 -and $indexResult.IndexWarnings) {
+            Write-Host ""
+            Write-Host "INDEX CREATION WARNINGS:" -ForegroundColor Yellow
+            foreach ($warning in $indexResult.IndexWarnings) {
+                Write-Host "  - $warning" -ForegroundColor Yellow
+            }
+        }
+        
+        if ($indexResult.ForeignKeyErrorCount -gt 0 -and $indexResult.ForeignKeyWarnings) {
+            Write-Host ""
+            Write-Host "FOREIGN KEY WARNINGS:" -ForegroundColor Yellow
+            foreach ($warning in $indexResult.ForeignKeyWarnings) {
+                Write-Host "  - $warning" -ForegroundColor Yellow
+            }
+        }
         
         if ($verifyResult -and $verifyResult.Success) {
             Write-Host "Total tables verified: $($verifyResult.TableCount)" -ForegroundColor Cyan

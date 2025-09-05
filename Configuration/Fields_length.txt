@@ -1,0 +1,183 @@
+# Vehicle Authorization Database - Field Length Configuration
+# Generated on: Fri Sep 05 14:55:49 CEST 2025
+# This file contains maximum text field lengths found in JSON sample data
+# Format: TableName.FieldName=MaxLength
+
+# Addresses Table
+Addresses.AddressID=48
+Addresses.City=24
+Addresses.CountryCode=12
+Addresses.PostalCode=31
+Addresses.Street=34
+
+# AgencyMappingValues Table
+AgencyMappingValues.AgencyMappingID=48
+AgencyMappingValues.DocumentID=48
+AgencyMappingValues.ValueDescription=243
+AgencyMappingValues.ValueID=48
+AgencyMappingValues.ValueText=224
+
+# AgencyMappings Table
+AgencyMappings.AgencyMappingID=48
+AgencyMappings.Requirement=12
+AgencyMappings.RequirementDescr=10
+AgencyMappings.VehicleTypeID=48
+
+# ApplicableRules Table
+ApplicableRules.Comment=271
+ApplicableRules.Directive=42
+ApplicableRules.MSCode=12
+ApplicableRules.RuleID=48
+ApplicableRules.RuleType=19
+ApplicableRules.VehicleTypeID=48
+
+# ApplicationBodies Table
+ApplicationBodies.ApplicationID=24
+ApplicationBodies.BodyID=48
+ApplicationBodies.BodyRole=10
+
+# ApplicationStaff Table
+ApplicationStaff.ApplicationID=24
+ApplicationStaff.StaffName=10
+ApplicationStaff.StaffType=10
+
+# Applications Table
+Applications.ApplicantBodyID=48
+Applications.ApplicationID=24
+Applications.ApplicationStatus=36
+Applications.ApplicationType=28
+Applications.ApplicationTypeVariantVersion=183
+Applications.ApplicationVersion=17
+Applications.BillingInformationID=48
+Applications.CaseType=40
+Applications.ContactPersonID=48
+Applications.DocLang=12
+Applications.EIN=18
+Applications.FinancialContactPersonID=48
+Applications.ID=48
+Applications.IssuingAuthority=16
+Applications.LegalDenomination=186
+Applications.MemberStates=10
+Applications.NationalRegNumber=38
+Applications.Phase=24
+Applications.PreEngagementID=24
+Applications.PreEngagementOtherInformation=36
+Applications.ProjectName=255
+Applications.Subcategory=96
+Applications.VehicleIdentifier=2988
+
+# BillingInformation Table
+BillingInformation.Acronym=17
+BillingInformation.AddressID=48
+BillingInformation.BillingID=48
+BillingInformation.ContactDetailsID=48
+BillingInformation.LegalDenomination=48
+BillingInformation.NationalRegNumber=38
+BillingInformation.SpecificBillingRequirements=61
+BillingInformation.VATNumber=20
+
+# Bodies Table
+Bodies.Acronym=17
+Bodies.AdditionalInfo=10
+Bodies.AddressID=48
+Bodies.BodyID=48
+Bodies.BodyIdNumber=10
+Bodies.BodyName=26
+Bodies.BodyType=10
+Bodies.ContactDetailsID=48
+Bodies.EINNumber=10
+Bodies.LegalDenomination=28
+Bodies.NationalRegNumber=10
+Bodies.VATNumber=20
+
+# ContactDetails Table
+ContactDetails.ContactDetailsID=48
+ContactDetails.Email=46
+ContactDetails.Fax=23
+ContactDetails.Phone=25
+ContactDetails.Website=27
+
+# ContactPersons Table
+ContactPersons.AddressID=48
+ContactPersons.ContactDetailsID=48
+ContactPersons.ContactPersonID=48
+ContactPersons.FirstName=20
+ContactPersons.LanguagesSpoken=10
+ContactPersons.PersonType=10
+ContactPersons.Surname=19
+ContactPersons.TitleOrFunction=19
+
+# Documents Table
+Documents.DocumentID=48
+Documents.FilePath=10
+Documents.FileTitle=54
+
+# Issues Table
+Issues.ApplicationID=24
+Issues.AssessmentStage=27
+Issues.Assignees=10
+Issues.AssigneesDisplayNames=10
+Issues.ID=48
+Issues.IssueDescription=21
+Issues.IssueID=28
+Issues.IssueStatus=19
+Issues.IssueType=19
+Issues.Owner=46
+Issues.OwnerDisplayName=27
+Issues.Resolution=10
+Issues.ResolutionDescription=10
+Issues.ResolutionText=10
+Issues.Title=17
+
+# MSMappingRequirementValues Table
+MSMappingRequirementValues.DocumentID=10
+MSMappingRequirementValues.RequirementID=10
+MSMappingRequirementValues.ValueDescription=10
+MSMappingRequirementValues.ValueID=10
+MSMappingRequirementValues.ValueText=10
+
+# MSMappingRequirements Table
+MSMappingRequirements.MappingID=48
+MSMappingRequirements.Requirement=10
+MSMappingRequirements.RequirementDescr=10
+MSMappingRequirements.RequirementID=10
+
+# MemberStateMappings Table
+MemberStateMappings.AssigneeStr=10
+MemberStateMappings.CountryCode=12
+MemberStateMappings.MappingID=48
+MemberStateMappings.Name=10
+MemberStateMappings.OtherDescription=10
+MemberStateMappings.ShuntingOnlyTxt=10
+MemberStateMappings.VehicleTypeID=48
+
+# Networks Table
+Networks.MappingID=48
+Networks.NetworkName=10
+
+# VehicleTypes Table
+VehicleTypes.AltTypeName=82
+VehicleTypes.ApplicationID=24
+VehicleTypes.AuthorizationHolderID=48
+VehicleTypes.AuthorizationType=27
+VehicleTypes.ChangeSummary=58
+VehicleTypes.CodedRestrictions=105
+VehicleTypes.DescriptionNew=82
+VehicleTypes.NonCodedRestrictions=110
+VehicleTypes.ReferenceToExistingStr=76
+VehicleTypes.RegistrationEntityRecipients=10
+VehicleTypes.TypeID=20
+VehicleTypes.TypeName=49
+VehicleTypes.VehicleIdentifier=21
+VehicleTypes.VehicleMainCategory=48
+VehicleTypes.VehicleSubCategory=51
+VehicleTypes.VehicleType=17
+VehicleTypes.VehicleTypeID=48
+VehicleTypes.VehicleValue=41
+
+# VehiclesToAuthorise Table
+VehiclesToAuthorise.VehicleIdentifier=21
+VehiclesToAuthorise.VehicleToAuthoriseID=48
+VehiclesToAuthorise.VehicleTypeID=48
+VehiclesToAuthorise.VehicleValue=42
+
