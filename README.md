@@ -56,6 +56,7 @@ powershell -ExecutionPolicy Bypass -File "CreateVehicleAuthDatabase.ps1"
 ## Features
 
 ### Java Application Features
+✅ **Automatic Backup** - Creates timestamped database backup at startup  
 ✅ **User-Friendly Menu** - Interactive menu-driven interface  
 ✅ **Database Creation** - Create complete database structure  
 ✅ **Database Verification** - Verify existing database structure  

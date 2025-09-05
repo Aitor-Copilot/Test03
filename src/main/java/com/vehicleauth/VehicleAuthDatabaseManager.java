@@ -1,11 +1,10 @@
 package com.vehicleauth;
 
+import com.vehicleauth.service.BackupService;
 import com.vehicleauth.service.DatabaseService;
 import com.vehicleauth.ui.MenuInterface;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.util.Scanner;
 
 /**
  * Main class for Vehicle Authorization Database Manager
@@ -17,6 +16,10 @@ public class VehicleAuthDatabaseManager {
     
     public static void main(String[] args) {
         logger.info("Starting Vehicle Authorization Database Manager");
+        
+        // Automatic database backup at startup
+        logger.info("Performing automatic database backup");
+        BackupService.createStartupBackup();
         
         try {
             MenuInterface menuInterface = new MenuInterface();

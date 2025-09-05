@@ -8,6 +8,9 @@ import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -34,6 +37,9 @@ public class VehicleAuthDatabaseManagerSimple {
     public static void main(String[] args) {
         System.out.println("Starting Vehicle Authorization Database Manager");
         
+        // Automatic database backup at startup
+        performStartupBackup();
+        
         try {
             VehicleAuthDatabaseManagerSimple app = new VehicleAuthDatabaseManagerSimple();
             app.showMainMenu();
@@ -44,6 +50,69 @@ public class VehicleAuthDatabaseManagerSimple {
         }
         
         System.out.println("Application shutdown complete");
+    }
+    
+    /**
+     * Perform automatic database backup at startup
+     * This method runs silently and does not interrupt application flow
+     */
+    private static void performStartupBackup() {
+        try {
+            // Check if source database exists
+            Path sourcePath = Paths.get(DATABASE_FILE);
+            if (!Files.exists(sourcePath)) {
+                System.out.println("⚠ Database backup skipped: Database file not found");
+                return;
+            }
+            
+            // Ensure backup directory exists
+            Path backupDir = Paths.get("Backup Database");
+            if (!Files.exists(backupDir)) {
+                try {
+                    Files.createDirectories(backupDir);
+                    System.out.println("✓ Created backup directory");
+                } catch (IOException e) {
+                    System.out.println("⚠ Could not create backup directory: " + e.getMessage());
+                    return;
+                }
+            }
+            
+            // Generate timestamped backup filename
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
+            String timestamp = LocalDateTime.now().format(formatter);
+            String backupFileName = "Database-Backup-" + timestamp + ".accdb";
+            Path backupPath = backupDir.resolve(backupFileName);
+            
+            // Create the backup copy
+            Files.copy(sourcePath, backupPath, StandardCopyOption.REPLACE_EXISTING);
+            
+            // Get file size for reporting
+            long fileSize = Files.size(backupPath);
+            String fileSizeStr = formatFileSize(fileSize);
+            
+            System.out.println("✓ Database backup created: " + backupFileName + " (" + fileSizeStr + ")");
+            
+        } catch (Exception e) {
+            // Silent failure - don't interrupt application startup
+            System.out.println("⚠ Database backup failed: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Format file size in human-readable format
+     * @param bytes File size in bytes
+     * @return Formatted file size string
+     */
+    private static String formatFileSize(long bytes) {
+        if (bytes < 1024) {
+            return bytes + " B";
+        } else if (bytes < 1024 * 1024) {
+            return String.format("%.1f KB", bytes / 1024.0);
+        } else if (bytes < 1024 * 1024 * 1024) {
+            return String.format("%.1f MB", bytes / (1024.0 * 1024.0));
+        } else {
+            return String.format("%.1f GB", bytes / (1024.0 * 1024.0 * 1024.0));
+        }
     }
     
     /**

@@ -7,11 +7,12 @@ This Java application provides a user-friendly menu interface for managing the V
 ## Features
 
 ### ✅ **Current Features**
-1. **Create New Database** - Executes the PowerShell script to create the complete database structure
-2. **Verify Database Structure** - Verifies existing database with detailed reporting
-3. **Interactive Menu** - User-friendly command-line interface
-4. **Error Handling** - Comprehensive error handling and user feedback
-5. **Real-time Output** - Shows PowerShell script output in real-time
+1. **Automatic Database Backup** - Creates timestamped backup at startup (no manual intervention needed)
+2. **Create New Database** - Executes the PowerShell script to create the complete database structure
+3. **Verify Database Structure** - Verifies existing database with detailed reporting
+4. **Interactive Menu** - User-friendly command-line interface
+5. **Error Handling** - Comprehensive error handling and user feedback
+6. **Real-time Output** - Shows PowerShell script output in real-time
 
 ### 🚧 **Future Features** (Framework Ready)
 - **Import JSON Data** - Import vehicle authorization data from JSON files
@@ -34,6 +35,29 @@ java -cp target/classes com.vehicleauth.VehicleAuthDatabaseManagerSimple
 ```bash
 mvn compile exec:java -Dexec.mainClass=com.vehicleauth.VehicleAuthDatabaseManagerSimple
 ```
+
+## Automatic Database Backup
+
+**🔄 Every time the application starts, it automatically:**
+1. ✅ Checks if the database file exists
+2. ✅ Creates the "Backup Database" folder if it doesn't exist
+3. ✅ Creates a timestamped backup copy (format: `Database-Backup-YYYYMMDD-HHMMSS.accdb`)
+4. ✅ Reports backup status and file size
+5. ✅ Continues with normal application startup
+
+**Example output:**
+```
+Starting Vehicle Authorization Database Manager
+✓ Database backup created: Database-Backup-20250905-094904.accdb (692.0 KB)
+```
+
+**Backup Features:**
+- 🔒 **No manual intervention needed** - Completely automatic
+- 📁 **Organized storage** - All backups in "Backup Database" folder
+- 🕐 **Timestamped filenames** - Easy to identify when backup was created
+- 📊 **File size reporting** - Shows backup size for verification
+- 🛡️ **Silent failure** - Won't interrupt application if backup fails
+- 🚫 **Git excluded** - Backup folder automatically excluded from version control
 
 ## Application Structure
 

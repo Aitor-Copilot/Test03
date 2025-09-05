@@ -3,6 +3,7 @@ echo ===============================================================
 echo    VEHICLE AUTHORIZATION DATABASE MANAGER
 echo ===============================================================
 echo Starting Java application...
+echo Note: Database backup will be created automatically at startup
 echo.
 
 REM Change to the directory where this batch file is located
