@@ -375,7 +375,7 @@ function Remove-ExistingTable {
     }
 }
 
-function Create-DatabaseTables {
+function New-DatabaseTables {
     param($Database, $Access)
     
     # First, remove all existing relationships so we can drop tables
@@ -431,7 +431,7 @@ function Create-DatabaseTables {
     }
 }
 
-function Create-DatabaseIndexes {
+function New-DatabaseIndexes {
     param($Database)
     
     $indexes = Get-IndexDefinitions
@@ -501,7 +501,7 @@ function Create-DatabaseIndexes {
     }
 }
 
-function Verify-DatabaseStructure {
+function Test-DatabaseStructure {
     param($Database, $Access)
     
     Write-Header "DATABASE STRUCTURE VERIFICATION"
@@ -609,14 +609,14 @@ function Main {
     try {
         # Create tables
         Write-Header "CREATING DATABASE STRUCTURE"
-        $tableResult = Create-DatabaseTables -Database $connection.Database -Access $connection.Access
+        $tableResult = New-DatabaseTables -Database $connection.Database -Access $connection.Access
         
         # Create indexes
-        $indexResult = Create-DatabaseIndexes -Database $connection.Database
+        $indexResult = New-DatabaseIndexes -Database $connection.Database
         
         # Verify structure (if requested or if there were no errors)
         if ($Verify -or ($tableResult.ErrorCount -eq 0 -and $indexResult.ErrorCount -eq 0)) {
-            $verifyResult = Verify-DatabaseStructure -Database $connection.Database -Access $connection.Access
+            $verifyResult = Test-DatabaseStructure -Database $connection.Database -Access $connection.Access
         }
         
         # Display final summary
