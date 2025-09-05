@@ -1,5 +1,5 @@
 # Vehicle Authorization Database - Field Length Configuration
-# Generated on: Fri Sep 05 14:55:49 CEST 2025
+# Generated on: Fri Sep 05 15:52:56 CEST 2025
 # This file contains maximum text field lengths found in JSON sample data
 # Format: TableName.FieldName=MaxLength
 
@@ -62,7 +62,7 @@ Applications.NationalRegNumber=38
 Applications.Phase=24
 Applications.PreEngagementID=24
 Applications.PreEngagementOtherInformation=36
-Applications.ProjectName=255
+Applications.ProjectName=1228
 Applications.Subcategory=96
 Applications.VehicleIdentifier=2988
 

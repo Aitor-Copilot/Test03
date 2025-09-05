@@ -1,5 +1,6 @@
 package com.vehicleauth.ui;
 
+import com.vehicleauth.service.ConfigurationService;
 import com.vehicleauth.service.DatabaseService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,11 +16,13 @@ public class MenuInterface {
     private static final Logger logger = LoggerFactory.getLogger(MenuInterface.class);
     private final Scanner scanner;
     private final DatabaseService databaseService;
+    private final ConfigurationService configurationService;
     private boolean running;
     
     public MenuInterface() {
         this.scanner = new Scanner(System.in);
         this.databaseService = new DatabaseService();
+        this.configurationService = new ConfigurationService();
         this.running = true;
     }
     
@@ -60,12 +63,13 @@ public class MenuInterface {
         System.out.println("===============================================================");
         System.out.println("1. Create New Database");
         System.out.println("2. Verify Database Structure");
-        System.out.println("3. Import JSON Data (Coming Soon)");
-        System.out.println("4. Export Database Report (Coming Soon)");
-        System.out.println("5. Database Statistics (Coming Soon)");
+        System.out.println("3. Generate Field Length Configuration");
+        System.out.println("4. Import JSON Data (Coming Soon)");
+        System.out.println("5. Export Database Report (Coming Soon)");
+        System.out.println("6. Database Statistics (Coming Soon)");
         System.out.println("0. Exit");
         System.out.println("===============================================================");
-        System.out.print("Please select an option (0-5): ");
+        System.out.print("Please select an option (0-6): ");
     }
     
     /**
@@ -97,19 +101,22 @@ public class MenuInterface {
                 handleVerifyDatabase();
                 break;
             case 3:
-                handleImportJsonData();
+                handleGenerateFieldLengthConfig();
                 break;
             case 4:
-                handleExportReport();
+                handleImportJsonData();
                 break;
             case 5:
+                handleExportReport();
+                break;
+            case 6:
                 handleDatabaseStatistics();
                 break;
             case 0:
                 handleExit();
                 break;
             default:
-                System.out.println("❌ Invalid option. Please select a number between 0-5.");
+                System.out.println("❌ Invalid option. Please select a number between 0-6.");
                 break;
         }
         
@@ -172,6 +179,40 @@ public class MenuInterface {
         } catch (Exception e) {
             logger.error("Error during database verification", e);
             System.out.println("❌ Error occurred during database verification: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Handle field length configuration generation
+     */
+    private void handleGenerateFieldLengthConfig() {
+        System.out.println("📊 GENERATE FIELD LENGTH CONFIGURATION");
+        System.out.println("---------------------------------------------------------------");
+        System.out.println("This will analyze all JSON files in the 'Json Files' directory");
+        System.out.println("and generate a configuration file with maximum text field lengths");
+        System.out.println("for the database schema.");
+        System.out.println();
+        System.out.println("The configuration file will be saved as:");
+        System.out.println("  📁 Configuration/Fields_length.txt");
+        System.out.println();
+        
+        System.out.print("Do you want to proceed? (y/N): ");
+        String confirmation = scanner.nextLine().trim().toLowerCase();
+        
+        if ("y".equals(confirmation) || "yes".equals(confirmation)) {
+            System.out.println("\n🔍 Analyzing JSON files...");
+            boolean success = configurationService.generateFieldLengthConfiguration();
+            
+            if (success) {
+                System.out.println("\n✅ Field length configuration generated successfully!");
+                System.out.println("📄 Configuration file: Configuration/Fields_length.txt");
+                System.out.println("🔧 This file can be used to optimize database field sizes.");
+            } else {
+                System.out.println("\n❌ Failed to generate field length configuration.");
+                System.out.println("Please check the logs for more details.");
+            }
+        } else {
+            System.out.println("❌ Operation cancelled.");
         }
     }
     

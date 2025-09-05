@@ -86,6 +86,16 @@
                 <version>3.1.2</version>
             </plugin>
             
+            <!-- Exec Maven Plugin for running the application -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.1.0</version>
+                <configuration>
+                    <mainClass>com.vehicleauth.VehicleAuthDatabaseManager</mainClass>
+                </configuration>
+            </plugin>
+            
             <!-- Maven Shade Plugin to create executable JAR -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
