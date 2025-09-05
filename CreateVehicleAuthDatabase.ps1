@@ -6,11 +6,12 @@
 # 
 # Main table: Applications (with ApplicationID as primary key)
 # 
-# Usage: powershell -ExecutionPolicy Bypass -File "CreateVehicleAuthDatabase.ps1"
+# Usage: powershell -ExecutionPolicy Bypass -File "CreateVehicleAuthDatabase.ps1" [-ConfigPath "path\to\config.txt"]
 # ==============================================================================
 
 param(
     [string]$DatabasePath = "Database.accdb",
+    [string]$ConfigPath = "",
     [switch]$Verify = $false
 )
 
@@ -20,6 +21,9 @@ param(
 
 $ErrorActionPreference = "Continue"
 $WarningPreference = "Continue"
+
+# Default field length configuration file path
+$DefaultConfigPath = "Configuration\Fields_length.txt"
 
 # ==============================================================================
 # FUNCTIONS
@@ -53,110 +57,203 @@ function Write-Info {
     Write-Host "i $Message" -ForegroundColor Cyan
 }
 
+function Read-FieldLengthConfiguration {
+    param([string]$ConfigFilePath)
+    
+    $fieldLengths = @{}
+    
+    if (-not (Test-Path $ConfigFilePath)) {
+        Write-Warning "Configuration file not found: $ConfigFilePath"
+        Write-Info "Using default field lengths..."
+        return $fieldLengths
+    }
+    
+    try {
+        Write-Info "Reading field length configuration from: $ConfigFilePath"
+        $content = Get-Content $ConfigFilePath -ErrorAction Stop
+        $parsedCount = 0
+        
+        foreach ($line in $content) {
+            # Skip empty lines and comments
+            if ([string]::IsNullOrWhiteSpace($line) -or $line.StartsWith("#")) {
+                continue
+            }
+            
+            # Parse format: TableName.FieldName=MaxLength
+            if ($line -match "^([^.]+)\.([^=]+)=(\d+)$") {
+                $tableName = $matches[1].Trim()
+                $fieldName = $matches[2].Trim()
+                $maxLength = [int]$matches[3].Trim()
+                
+                if (-not $fieldLengths.ContainsKey($tableName)) {
+                    $fieldLengths[$tableName] = @{}
+                }
+                
+                $fieldLengths[$tableName][$fieldName] = $maxLength
+                $parsedCount++
+            }
+        }
+        
+        Write-Success "Parsed $parsedCount field length configurations"
+        return $fieldLengths
+    }
+    catch {
+        Write-Error "Failed to read configuration file: $($_.Exception.Message)"
+        Write-Info "Using default field lengths..."
+        return @{}
+    }
+}
+
+function Get-ConfiguredFieldLength {
+    param(
+        [hashtable]$FieldLengths,
+        [string]$TableName,
+        [string]$FieldName,
+        [int]$DefaultLength = 255
+    )
+    
+    if ($FieldLengths.ContainsKey($TableName) -and $FieldLengths[$TableName].ContainsKey($FieldName)) {
+        $configuredLength = $FieldLengths[$TableName][$FieldName]
+        # Add some padding to configured length for safety (minimum 10, maximum 50% extra)
+        $padding = [Math]::Max(10, [Math]::Min(50, [Math]::Ceiling($configuredLength * 0.2)))
+        $finalLength = $configuredLength + $padding
+        
+        # MS Access TEXT field limit is 255 characters - use MEMO for longer fields
+        if ($finalLength -gt 255) {
+            return $finalLength # Return the actual length, let the caller decide on MEMO
+        }
+        
+        return $finalLength
+    }
+    
+    return $DefaultLength
+}
+
+function Get-FieldDefinition {
+    param(
+        [hashtable]$FieldLengths,
+        [string]$TableName,
+        [string]$FieldName,
+        [int]$DefaultLength = 255
+    )
+    
+    $length = Get-ConfiguredFieldLength $FieldLengths $TableName $FieldName $DefaultLength
+    
+    # MS Access TEXT field limit is 255 characters - use MEMO for longer fields
+    if ($length -gt 255) {
+        Write-Host "    - Field $TableName.$FieldName ($length chars) will use MEMO type" -ForegroundColor Yellow
+        return "MEMO"
+    }
+    
+    return "TEXT($length)"
+}
+
 # ==============================================================================
 # TABLE DEFINITIONS
 # ==============================================================================
 
 function Get-TableDefinitions {
+    param([hashtable]$FieldLengths = @{})
+    
     return @{
         # Base tables (no dependencies)
         "Addresses" = @{
-            SQL = "CREATE TABLE Addresses (AddressID TEXT(100) PRIMARY KEY, Street TEXT(255), City TEXT(100), PostalCode TEXT(20), CountryCode TEXT(10), CreatedDate DATETIME)"
+            SQL = "CREATE TABLE Addresses (AddressID TEXT($(Get-ConfiguredFieldLength $FieldLengths 'Addresses' 'AddressID' 100)) PRIMARY KEY, Street TEXT($(Get-ConfiguredFieldLength $FieldLengths 'Addresses' 'Street' 255)), City TEXT($(Get-ConfiguredFieldLength $FieldLengths 'Addresses' 'City' 100)), PostalCode TEXT($(Get-ConfiguredFieldLength $FieldLengths 'Addresses' 'PostalCode' 50)), CountryCode TEXT($(Get-ConfiguredFieldLength $FieldLengths 'Addresses' 'CountryCode' 15)), CreatedDate DATETIME)"
             Description = "Normalized address information"
         }
         
         "ContactDetails" = @{
-            SQL = "CREATE TABLE ContactDetails (ContactDetailsID TEXT(100) PRIMARY KEY, Phone TEXT(50), Fax TEXT(50), Email TEXT(255), Website TEXT(255), CreatedDate DATETIME)"
+            SQL = "CREATE TABLE ContactDetails (ContactDetailsID TEXT($(Get-ConfiguredFieldLength $FieldLengths 'ContactDetails' 'ContactDetailsID' 100)) PRIMARY KEY, Phone TEXT($(Get-ConfiguredFieldLength $FieldLengths 'ContactDetails' 'Phone' 50)), Fax TEXT($(Get-ConfiguredFieldLength $FieldLengths 'ContactDetails' 'Fax' 50)), Email TEXT($(Get-ConfiguredFieldLength $FieldLengths 'ContactDetails' 'Email' 255)), Website TEXT($(Get-ConfiguredFieldLength $FieldLengths 'ContactDetails' 'Website' 255)), CreatedDate DATETIME)"
             Description = "Contact information (phone, email, website)"
         }
         
         "Documents" = @{
-            SQL = "CREATE TABLE Documents (DocumentID TEXT(100) PRIMARY KEY, FileTitle TEXT(255), FilePath TEXT(255), UploadDate DATETIME)"
+            SQL = "CREATE TABLE Documents (DocumentID TEXT($(Get-ConfiguredFieldLength $FieldLengths 'Documents' 'DocumentID' 100)) PRIMARY KEY, FileTitle TEXT($(Get-ConfiguredFieldLength $FieldLengths 'Documents' 'FileTitle' 255)), FilePath TEXT($(Get-ConfiguredFieldLength $FieldLengths 'Documents' 'FilePath' 255)), UploadDate DATETIME)"
             Description = "Document and file references"
         }
         
         # Tables with dependencies
         "ContactPersons" = @{
-            SQL = "CREATE TABLE ContactPersons (ContactPersonID TEXT(100) PRIMARY KEY, FirstName TEXT(100), Surname TEXT(100), TitleOrFunction TEXT(100), AddressID TEXT(100), ContactDetailsID TEXT(100), LanguagesSpoken MEMO, PersonType TEXT(50))"
+            SQL = "CREATE TABLE ContactPersons (ContactPersonID TEXT($(Get-ConfiguredFieldLength $FieldLengths 'ContactPersons' 'ContactPersonID' 100)) PRIMARY KEY, FirstName TEXT($(Get-ConfiguredFieldLength $FieldLengths 'ContactPersons' 'FirstName' 100)), Surname TEXT($(Get-ConfiguredFieldLength $FieldLengths 'ContactPersons' 'Surname' 100)), TitleOrFunction TEXT($(Get-ConfiguredFieldLength $FieldLengths 'ContactPersons' 'TitleOrFunction' 100)), AddressID TEXT($(Get-ConfiguredFieldLength $FieldLengths 'ContactPersons' 'AddressID' 100)), ContactDetailsID TEXT($(Get-ConfiguredFieldLength $FieldLengths 'ContactPersons' 'ContactDetailsID' 100)), LanguagesSpoken MEMO, PersonType TEXT($(Get-ConfiguredFieldLength $FieldLengths 'ContactPersons' 'PersonType' 50)))"
             Description = "Individual contact person information"
         }
         
         "BillingInformation" = @{
-            SQL = "CREATE TABLE BillingInformation (BillingID TEXT(100) PRIMARY KEY, LegalDenomination TEXT(255), Acronym TEXT(100), VATNumber TEXT(50), NationalRegNumber TEXT(50), AddressID TEXT(100), ContactDetailsID TEXT(100), SpecificBillingRequirements MEMO)"
+            SQL = "CREATE TABLE BillingInformation (BillingID TEXT($(Get-ConfiguredFieldLength $FieldLengths 'BillingInformation' 'BillingID' 100)) PRIMARY KEY, LegalDenomination TEXT($(Get-ConfiguredFieldLength $FieldLengths 'BillingInformation' 'LegalDenomination' 255)), Acronym TEXT($(Get-ConfiguredFieldLength $FieldLengths 'BillingInformation' 'Acronym' 100)), VATNumber TEXT($(Get-ConfiguredFieldLength $FieldLengths 'BillingInformation' 'VATNumber' 50)), NationalRegNumber TEXT($(Get-ConfiguredFieldLength $FieldLengths 'BillingInformation' 'NationalRegNumber' 50)), AddressID TEXT($(Get-ConfiguredFieldLength $FieldLengths 'BillingInformation' 'AddressID' 100)), ContactDetailsID TEXT($(Get-ConfiguredFieldLength $FieldLengths 'BillingInformation' 'ContactDetailsID' 100)), SpecificBillingRequirements MEMO)"
             Description = "Billing and payment information"
         }
         
         "Bodies" = @{
-            SQL = "CREATE TABLE Bodies (BodyID TEXT(100) PRIMARY KEY, BodyType TEXT(50), LegalDenomination TEXT(255), Acronym TEXT(100), VATNumber TEXT(50), NationalRegNumber TEXT(50), AddressID TEXT(100), ContactDetailsID TEXT(100), AdditionalInfo MEMO, BodyName TEXT(255), BodyIdNumber TEXT(100), EINNumber TEXT(50))"
+            SQL = "CREATE TABLE Bodies (BodyID TEXT($(Get-ConfiguredFieldLength $FieldLengths 'Bodies' 'BodyID' 100)) PRIMARY KEY, BodyType TEXT($(Get-ConfiguredFieldLength $FieldLengths 'Bodies' 'BodyType' 50)), LegalDenomination TEXT($(Get-ConfiguredFieldLength $FieldLengths 'Bodies' 'LegalDenomination' 255)), Acronym TEXT($(Get-ConfiguredFieldLength $FieldLengths 'Bodies' 'Acronym' 100)), VATNumber TEXT($(Get-ConfiguredFieldLength $FieldLengths 'Bodies' 'VATNumber' 50)), NationalRegNumber TEXT($(Get-ConfiguredFieldLength $FieldLengths 'Bodies' 'NationalRegNumber' 50)), AddressID TEXT($(Get-ConfiguredFieldLength $FieldLengths 'Bodies' 'AddressID' 100)), ContactDetailsID TEXT($(Get-ConfiguredFieldLength $FieldLengths 'Bodies' 'ContactDetailsID' 100)), AdditionalInfo MEMO, BodyName TEXT($(Get-ConfiguredFieldLength $FieldLengths 'Bodies' 'BodyName' 255)), BodyIdNumber TEXT($(Get-ConfiguredFieldLength $FieldLengths 'Bodies' 'BodyIdNumber' 100)), EINNumber TEXT($(Get-ConfiguredFieldLength $FieldLengths 'Bodies' 'EINNumber' 50)))"
             Description = "Organizations (Applicant, Notified, Designated, Assessment bodies)"
         }
         
         # Main table
         "Applications" = @{
-            SQL = "CREATE TABLE Applications (ApplicationID TEXT(50) PRIMARY KEY, ID TEXT(100), CaseType TEXT(50), NationalRegNumber TEXT(50), ProjectName TEXT(255), ApplicationType TEXT(50), ApplicationTypeVariantVersion MEMO, IssuingAuthority TEXT(10), ApplicationStatus TEXT(50), Phase TEXT(50), DecisionDate DATETIME, Submission DATETIME, CompletenessAcknowledgement DATETIME, Modified DATETIME, CachedLastUpdate DATETIME, VehicleIdentifier MEMO, EIN TEXT(50), LegalDenomination TEXT(255), MemberStates MEMO, Subcategory MEMO, IsWholeEU YESNO, PreEngaged YESNO, PreEngagementID TEXT(50), IsPreEngagement YESNO, PreEngagementOtherInformation MEMO, DocLang TEXT(10), ApplicationVersion TEXT(20), ContactPersonID TEXT(100), FinancialContactPersonID TEXT(100), BillingInformationID TEXT(100), ApplicantBodyID TEXT(100), CreatedDate DATETIME, UpdatedDate DATETIME)"
+            SQL = "CREATE TABLE Applications (ApplicationID $(Get-FieldDefinition $FieldLengths 'Applications' 'ApplicationID' 50) PRIMARY KEY, ID $(Get-FieldDefinition $FieldLengths 'Applications' 'ID' 100), CaseType $(Get-FieldDefinition $FieldLengths 'Applications' 'CaseType' 50), NationalRegNumber $(Get-FieldDefinition $FieldLengths 'Applications' 'NationalRegNumber' 50), ProjectName $(Get-FieldDefinition $FieldLengths 'Applications' 'ProjectName' 255), ApplicationType $(Get-FieldDefinition $FieldLengths 'Applications' 'ApplicationType' 50), ApplicationTypeVariantVersion MEMO, IssuingAuthority $(Get-FieldDefinition $FieldLengths 'Applications' 'IssuingAuthority' 20), ApplicationStatus $(Get-FieldDefinition $FieldLengths 'Applications' 'ApplicationStatus' 50), Phase $(Get-FieldDefinition $FieldLengths 'Applications' 'Phase' 50), DecisionDate DATETIME, Submission DATETIME, CompletenessAcknowledgement DATETIME, Modified DATETIME, CachedLastUpdate DATETIME, VehicleIdentifier MEMO, EIN $(Get-FieldDefinition $FieldLengths 'Applications' 'EIN' 50), LegalDenomination $(Get-FieldDefinition $FieldLengths 'Applications' 'LegalDenomination' 255), MemberStates MEMO, Subcategory MEMO, IsWholeEU YESNO, PreEngaged YESNO, PreEngagementID $(Get-FieldDefinition $FieldLengths 'Applications' 'PreEngagementID' 50), IsPreEngagement YESNO, PreEngagementOtherInformation MEMO, DocLang $(Get-FieldDefinition $FieldLengths 'Applications' 'DocLang' 15), ApplicationVersion $(Get-FieldDefinition $FieldLengths 'Applications' 'ApplicationVersion' 30), ContactPersonID $(Get-FieldDefinition $FieldLengths 'Applications' 'ContactPersonID' 100), FinancialContactPersonID $(Get-FieldDefinition $FieldLengths 'Applications' 'FinancialContactPersonID' 100), BillingInformationID $(Get-FieldDefinition $FieldLengths 'Applications' 'BillingInformationID' 100), ApplicantBodyID $(Get-FieldDefinition $FieldLengths 'Applications' 'ApplicantBodyID' 100), CreatedDate DATETIME, UpdatedDate DATETIME)"
             Description = "Main table - Vehicle authorization applications"
         }
         
         # Tables dependent on Applications
         "Issues" = @{
-            SQL = "CREATE TABLE Issues (IssueID TEXT(50) PRIMARY KEY, ID TEXT(100), ApplicationID TEXT(50), Title TEXT(255), IssueDescription MEMO, Owner TEXT(100), OwnerDisplayName TEXT(255), UserIsOwner YESNO, Assignees MEMO, AssigneesDisplayNames MEMO, DueBy DATETIME, CreationDate DATETIME, IssueType TEXT(50), IssueStatus TEXT(50), Resolution TEXT(255), AssessmentStage TEXT(50), ResolutionText MEMO, SSCClosedOut YESNO, ResolutionDescription MEMO)"
+            SQL = "CREATE TABLE Issues (IssueID TEXT($(Get-ConfiguredFieldLength $FieldLengths 'Issues' 'IssueID' 50)) PRIMARY KEY, ID TEXT($(Get-ConfiguredFieldLength $FieldLengths 'Issues' 'ID' 100)), ApplicationID TEXT($(Get-ConfiguredFieldLength $FieldLengths 'Issues' 'ApplicationID' 50)), Title TEXT($(Get-ConfiguredFieldLength $FieldLengths 'Issues' 'Title' 255)), IssueDescription MEMO, Owner TEXT($(Get-ConfiguredFieldLength $FieldLengths 'Issues' 'Owner' 100)), OwnerDisplayName TEXT($(Get-ConfiguredFieldLength $FieldLengths 'Issues' 'OwnerDisplayName' 255)), UserIsOwner YESNO, Assignees MEMO, AssigneesDisplayNames MEMO, DueBy DATETIME, CreationDate DATETIME, IssueType TEXT($(Get-ConfiguredFieldLength $FieldLengths 'Issues' 'IssueType' 50)), IssueStatus TEXT($(Get-ConfiguredFieldLength $FieldLengths 'Issues' 'IssueStatus' 50)), Resolution TEXT($(Get-ConfiguredFieldLength $FieldLengths 'Issues' 'Resolution' 255)), AssessmentStage TEXT($(Get-ConfiguredFieldLength $FieldLengths 'Issues' 'AssessmentStage' 50)), ResolutionText MEMO, SSCClosedOut YESNO, ResolutionDescription MEMO)"
             Description = "Issues and problems related to applications"
         }
         
         "ApplicationBodies" = @{
-            SQL = "CREATE TABLE ApplicationBodies (ApplicationID TEXT(50), BodyID TEXT(100), BodyRole TEXT(50), PRIMARY KEY (ApplicationID, BodyID, BodyRole))"
+            SQL = "CREATE TABLE ApplicationBodies (ApplicationID TEXT($(Get-ConfiguredFieldLength $FieldLengths 'ApplicationBodies' 'ApplicationID' 50)), BodyID TEXT($(Get-ConfiguredFieldLength $FieldLengths 'ApplicationBodies' 'BodyID' 100)), BodyRole TEXT($(Get-ConfiguredFieldLength $FieldLengths 'ApplicationBodies' 'BodyRole' 50)), PRIMARY KEY (ApplicationID, BodyID, BodyRole))"
             Description = "Many-to-many relationship between Applications and Bodies"
         }
         
         "VehicleTypes" = @{
-            SQL = "CREATE TABLE VehicleTypes (VehicleTypeID TEXT(100) PRIMARY KEY, ApplicationID TEXT(50), AuthorizationType TEXT(50), VehicleType TEXT(50), TypeID TEXT(50), TypeName TEXT(255), AltTypeName TEXT(255), CreationDate DATETIME, ReferenceToExistingStr MEMO, DescriptionNew MEMO, VehicleIdentifier TEXT(50), VehicleValue MEMO, AuthorizationHolderID TEXT(100), IsApplicantTypeHolder YESNO, ERATVDateOfRecord DATETIME, VehicleMainCategory TEXT(255), VehicleSubCategory TEXT(255), NonCodedRestrictions MEMO, CodedRestrictions MEMO, ChangeSummary MEMO, RegistrationEntityRecipients MEMO)"
+            SQL = "CREATE TABLE VehicleTypes (VehicleTypeID TEXT($(Get-ConfiguredFieldLength $FieldLengths 'VehicleTypes' 'VehicleTypeID' 100)) PRIMARY KEY, ApplicationID TEXT($(Get-ConfiguredFieldLength $FieldLengths 'VehicleTypes' 'ApplicationID' 50)), AuthorizationType TEXT($(Get-ConfiguredFieldLength $FieldLengths 'VehicleTypes' 'AuthorizationType' 50)), VehicleType TEXT($(Get-ConfiguredFieldLength $FieldLengths 'VehicleTypes' 'VehicleType' 50)), TypeID TEXT($(Get-ConfiguredFieldLength $FieldLengths 'VehicleTypes' 'TypeID' 50)), TypeName TEXT($(Get-ConfiguredFieldLength $FieldLengths 'VehicleTypes' 'TypeName' 255)), AltTypeName TEXT($(Get-ConfiguredFieldLength $FieldLengths 'VehicleTypes' 'AltTypeName' 255)), CreationDate DATETIME, ReferenceToExistingStr MEMO, DescriptionNew MEMO, VehicleIdentifier TEXT($(Get-ConfiguredFieldLength $FieldLengths 'VehicleTypes' 'VehicleIdentifier' 50)), VehicleValue MEMO, AuthorizationHolderID TEXT($(Get-ConfiguredFieldLength $FieldLengths 'VehicleTypes' 'AuthorizationHolderID' 100)), IsApplicantTypeHolder YESNO, ERATVDateOfRecord DATETIME, VehicleMainCategory TEXT($(Get-ConfiguredFieldLength $FieldLengths 'VehicleTypes' 'VehicleMainCategory' 100)), VehicleSubCategory TEXT($(Get-ConfiguredFieldLength $FieldLengths 'VehicleTypes' 'VehicleSubCategory' 100)), NonCodedRestrictions MEMO, CodedRestrictions MEMO, ChangeSummary MEMO, RegistrationEntityRecipients MEMO)"
             Description = "Vehicle type, variant, and version information"
         }
         
         "ApplicationStaff" = @{
-            SQL = "CREATE TABLE ApplicationStaff (ApplicationID TEXT(50), StaffType TEXT(50), StaffName TEXT(255), PRIMARY KEY (ApplicationID, StaffType, StaffName))"
+            SQL = "CREATE TABLE ApplicationStaff (ApplicationID TEXT($(Get-ConfiguredFieldLength $FieldLengths 'ApplicationStaff' 'ApplicationID' 50)), StaffType TEXT($(Get-ConfiguredFieldLength $FieldLengths 'ApplicationStaff' 'StaffType' 50)), StaffName TEXT($(Get-ConfiguredFieldLength $FieldLengths 'ApplicationStaff' 'StaffName' 255)), PRIMARY KEY (ApplicationID, StaffType, StaffName))"
             Description = "Staff assignments (Assessors, Project Managers, etc.)"
         }
         
         # Tables dependent on VehicleTypes
         "VehiclesToAuthorise" = @{
-            SQL = "CREATE TABLE VehiclesToAuthorise (VehicleToAuthoriseID TEXT(100) PRIMARY KEY, VehicleTypeID TEXT(100), VehicleValue TEXT(255), VehicleIdentifier TEXT(50))"
+            SQL = "CREATE TABLE VehiclesToAuthorise (VehicleToAuthoriseID TEXT($(Get-ConfiguredFieldLength $FieldLengths 'VehiclesToAuthorise' 'VehicleToAuthoriseID' 100)) PRIMARY KEY, VehicleTypeID TEXT($(Get-ConfiguredFieldLength $FieldLengths 'VehiclesToAuthorise' 'VehicleTypeID' 100)), VehicleValue TEXT($(Get-ConfiguredFieldLength $FieldLengths 'VehiclesToAuthorise' 'VehicleValue' 255)), VehicleIdentifier TEXT($(Get-ConfiguredFieldLength $FieldLengths 'VehiclesToAuthorise' 'VehicleIdentifier' 50)))"
             Description = "Specific vehicles within vehicle types"
         }
         
         "ApplicableRules" = @{
-            SQL = "CREATE TABLE ApplicableRules (RuleID TEXT(100) PRIMARY KEY, VehicleTypeID TEXT(100), RuleType TEXT(50), MSCode TEXT(10), Comment MEMO, Directive TEXT(100))"
+            SQL = "CREATE TABLE ApplicableRules (RuleID TEXT($(Get-ConfiguredFieldLength $FieldLengths 'ApplicableRules' 'RuleID' 100)) PRIMARY KEY, VehicleTypeID TEXT($(Get-ConfiguredFieldLength $FieldLengths 'ApplicableRules' 'VehicleTypeID' 100)), RuleType TEXT($(Get-ConfiguredFieldLength $FieldLengths 'ApplicableRules' 'RuleType' 50)), MSCode TEXT($(Get-ConfiguredFieldLength $FieldLengths 'ApplicableRules' 'MSCode' 15)), Comment MEMO, Directive TEXT($(Get-ConfiguredFieldLength $FieldLengths 'ApplicableRules' 'Directive' 100)))"
             Description = "Regulatory rules and directives"
         }
         
         "MemberStateMappings" = @{
-            SQL = "CREATE TABLE MemberStateMappings (MappingID TEXT(100) PRIMARY KEY, VehicleTypeID TEXT(100), CountryCode TEXT(10), Name TEXT(255), PassengerTransport YESNO, HighSpeed YESNO, FreightTransport YESNO, DangerousGoodsServices YESNO, ShuntingOnly YESNO, ShuntingOnlyTxt MEMO, Other YESNO, OtherDescription MEMO, IsBorderStation YESNO, AssigneeStr TEXT(255))"
+            SQL = "CREATE TABLE MemberStateMappings (MappingID TEXT($(Get-ConfiguredFieldLength $FieldLengths 'MemberStateMappings' 'MappingID' 100)) PRIMARY KEY, VehicleTypeID TEXT($(Get-ConfiguredFieldLength $FieldLengths 'MemberStateMappings' 'VehicleTypeID' 100)), CountryCode TEXT($(Get-ConfiguredFieldLength $FieldLengths 'MemberStateMappings' 'CountryCode' 15)), Name TEXT($(Get-ConfiguredFieldLength $FieldLengths 'MemberStateMappings' 'Name' 255)), PassengerTransport YESNO, HighSpeed YESNO, FreightTransport YESNO, DangerousGoodsServices YESNO, ShuntingOnly YESNO, ShuntingOnlyTxt MEMO, Other YESNO, OtherDescription MEMO, IsBorderStation YESNO, AssigneeStr TEXT($(Get-ConfiguredFieldLength $FieldLengths 'MemberStateMappings' 'AssigneeStr' 255)))"
             Description = "Country-specific operational data"
         }
         
         "AgencyMappings" = @{
-            SQL = "CREATE TABLE AgencyMappings (AgencyMappingID TEXT(100) PRIMARY KEY, VehicleTypeID TEXT(100), Requirement TEXT(10), RequirementDescr MEMO, Visible YESNO)"
+            SQL = "CREATE TABLE AgencyMappings (AgencyMappingID TEXT($(Get-ConfiguredFieldLength $FieldLengths 'AgencyMappings' 'AgencyMappingID' 100)) PRIMARY KEY, VehicleTypeID TEXT($(Get-ConfiguredFieldLength $FieldLengths 'AgencyMappings' 'VehicleTypeID' 100)), Requirement TEXT($(Get-ConfiguredFieldLength $FieldLengths 'AgencyMappings' 'Requirement' 15)), RequirementDescr MEMO, Visible YESNO)"
             Description = "Agency requirements and mappings"
         }
         
         # Tables with further dependencies
         "Networks" = @{
-            SQL = "CREATE TABLE Networks (NetworkID AUTOINCREMENT PRIMARY KEY, MappingID TEXT(100), NetworkName TEXT(255))"
+            SQL = "CREATE TABLE Networks (NetworkID AUTOINCREMENT PRIMARY KEY, MappingID TEXT($(Get-ConfiguredFieldLength $FieldLengths 'Networks' 'MappingID' 100)), NetworkName TEXT($(Get-ConfiguredFieldLength $FieldLengths 'Networks' 'NetworkName' 255)))"
             Description = "Network information for member states"
         }
         
         "AgencyMappingValues" = @{
-            SQL = "CREATE TABLE AgencyMappingValues (ValueID TEXT(100) PRIMARY KEY, AgencyMappingID TEXT(100), DocumentID TEXT(100), ValueDescription MEMO, ValueText MEMO)"
+            SQL = "CREATE TABLE AgencyMappingValues (ValueID TEXT($(Get-ConfiguredFieldLength $FieldLengths 'AgencyMappingValues' 'ValueID' 100)) PRIMARY KEY, AgencyMappingID TEXT($(Get-ConfiguredFieldLength $FieldLengths 'AgencyMappingValues' 'AgencyMappingID' 100)), DocumentID TEXT($(Get-ConfiguredFieldLength $FieldLengths 'AgencyMappingValues' 'DocumentID' 100)), ValueDescription MEMO, ValueText MEMO)"
             Description = "Values for agency mapping requirements"
         }
         
         "MSMappingRequirements" = @{
-            SQL = "CREATE TABLE MSMappingRequirements (RequirementID TEXT(100) PRIMARY KEY, MappingID TEXT(100), Requirement TEXT(10), RequirementDescr MEMO, Visible YESNO)"
+            SQL = "CREATE TABLE MSMappingRequirements (RequirementID TEXT($(Get-ConfiguredFieldLength $FieldLengths 'MSMappingRequirements' 'RequirementID' 100)) PRIMARY KEY, MappingID TEXT($(Get-ConfiguredFieldLength $FieldLengths 'MSMappingRequirements' 'MappingID' 100)), Requirement TEXT($(Get-ConfiguredFieldLength $FieldLengths 'MSMappingRequirements' 'Requirement' 15)), RequirementDescr MEMO, Visible YESNO)"
             Description = "Requirements for member state mappings"
         }
         
         "MSMappingRequirementValues" = @{
-            SQL = "CREATE TABLE MSMappingRequirementValues (ValueID TEXT(100) PRIMARY KEY, RequirementID TEXT(100), DocumentID TEXT(100), ValueDescription MEMO, ValueText MEMO)"
+            SQL = "CREATE TABLE MSMappingRequirementValues (ValueID TEXT($(Get-ConfiguredFieldLength $FieldLengths 'MSMappingRequirementValues' 'ValueID' 100)) PRIMARY KEY, RequirementID TEXT($(Get-ConfiguredFieldLength $FieldLengths 'MSMappingRequirementValues' 'RequirementID' 100)), DocumentID TEXT($(Get-ConfiguredFieldLength $FieldLengths 'MSMappingRequirementValues' 'DocumentID' 100)), ValueDescription MEMO, ValueText MEMO)"
             Description = "Values for member state mapping requirements"
         }
     }
@@ -376,12 +473,12 @@ function Remove-ExistingTable {
 }
 
 function New-DatabaseTables {
-    param($Database, $Access)
+    param($Database, $Access, $FieldLengths = @{})
     
     # First, remove all existing relationships so we can drop tables
     Remove-AllRelationships -Database $Database
     
-    $tables = Get-TableDefinitions
+    $tables = Get-TableDefinitions -FieldLengths $FieldLengths
     $tableOrder = @(
         "Addresses", "ContactDetails", "Documents",
         "ContactPersons", "BillingInformation", "Bodies",
@@ -591,6 +688,13 @@ function Main {
     Write-Host "Main Table: Applications (with ApplicationID as primary key)" -ForegroundColor Cyan
     Write-Host ""
     
+    # Determine configuration file path
+    $configFilePath = if ([string]::IsNullOrWhiteSpace($ConfigPath)) { $DefaultConfigPath } else { $ConfigPath }
+    Write-Host "Configuration: $configFilePath" -ForegroundColor Yellow
+    
+    # Read field length configuration
+    $fieldLengths = Read-FieldLengthConfiguration -ConfigFilePath $configFilePath
+    
     # Check if database file exists
     if (-not (Test-Path $DatabasePath)) {
         Write-Error "Database file not found: $DatabasePath"
@@ -609,7 +713,7 @@ function Main {
     try {
         # Create tables
         Write-Header "CREATING DATABASE STRUCTURE"
-        $tableResult = New-DatabaseTables -Database $connection.Database -Access $connection.Access
+        $tableResult = New-DatabaseTables -Database $connection.Database -Access $connection.Access -FieldLengths $fieldLengths
         
         # Create indexes
         $indexResult = New-DatabaseIndexes -Database $connection.Database
