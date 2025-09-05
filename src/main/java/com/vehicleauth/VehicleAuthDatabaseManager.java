@@ -1,7 +1,6 @@
 package com.vehicleauth;
 
 import com.vehicleauth.service.BackupService;
-import com.vehicleauth.service.DatabaseService;
 import com.vehicleauth.ui.MenuInterface;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
